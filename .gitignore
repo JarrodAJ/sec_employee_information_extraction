@@ -2,7 +2,7 @@
 data/
 *_filings/
 *.tar.gz
-
+*employee_count_paragraphs*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
