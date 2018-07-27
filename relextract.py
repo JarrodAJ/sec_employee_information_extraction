@@ -431,14 +431,14 @@ def make_fact_df(docs, re_func, df=0, id_fields=0, verbose = False):
     if type(docs) == type(""):
         docs = [docs]
     
-    if type(df) == type(pd.DataFrame()) :
-        doc_ids = df.index.tolist() # Use the index to identify documents
-        if id_fields:
-            input_df_fields = input_df_fields + id_fields 
-        docs = docs.tolist()
+#    if type(df) == type(pd.DataFrame()) :
+#        doc_ids = df.index.tolist() # Use the index to identify documents
+#        if id_fields:
+#            input_df_fields = input_df_fields + id_fields 
+#        docs = docs.tolist()
 
-    else: 
-        doc_ids = list(range(len(docs)))
+    #else: 
+    doc_ids = list(range(len(docs)))
         
     all_docs, all_rels, doc_id_list = [], [], []
     for i, doc in enumerate(docs):
@@ -472,10 +472,14 @@ def make_fact_df(docs, re_func, df=0, id_fields=0, verbose = False):
         output_df_fields = input_df_fields + field_names
         output_df = pd.DataFrame(fact_dict, columns=output_df_fields)
         return output_df
-    return 0
+    return pd.DataFrame(columns = ['doc_ids', 'sent_num', 'word_num', 'subject', 'verb', 'quantity',
+       'quantity_type', 'type_token', 'word', 'sentence'] ) 
 
 def add_units_and_values(df, quantity_col):
     """Create units, data_values columns from tokens in quantity_col."""
+    if df.shape[0] == 0:
+        return pd.DataFrame(columns = df.columns.tolist() + ['units', 'data_values'])
+    
     df = df.copy()
     df.loc[:, 'units'] = 'ones'
     
@@ -517,6 +521,8 @@ def add_units_and_values(df, quantity_col):
     return df
 def fix_token_columns(df, col_list):
     """Return df with tokens converted to text."""
+    if df.shape[0] == 0:
+        return df
     df = df.copy()
     for col in col_list:
         df.loc[:,col] = df.loc[:, col].apply(lambda x: x.text)

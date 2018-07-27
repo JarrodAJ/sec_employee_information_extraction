@@ -11,7 +11,7 @@ server <- function(input, output){
   # updated when the user clicks the button
   fact_data <- eventReactive(input$update, {
     fact_table(input$text) 
-  }, ignoreNULL = TRUE, ignoreInit = TRUE)
+  }, ignoreNULL = TRUE, ignoreInit = FALSE)
   
   output$entry_text <- renderText({ 
     input$update
