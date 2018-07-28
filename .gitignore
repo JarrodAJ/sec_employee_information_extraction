@@ -110,3 +110,4 @@ venv.bak/
 .Rproj.user
 
 *.Rproj
+*.Rhistory
