@@ -106,11 +106,12 @@ def find_root_tok(tok):
         root_tok = root_tok.head
     return (root_tok, steps)
 
-def find_verb_tok(tok):
+def find_verb_tok(tok, verbose = False):
     """Return first verb ancestor of tok."""
     verb_tok = 0
     for a in tok.ancestors:
-        if a.pos_ == 'VERB' and a.dep_ in ['ROOT', 'ccomp']:
+        #if a.pos_ == 'VERB' and a.dep_ in ['ROOT', 'ccomp', 'advcl']:
+        if a.pos_ == 'VERB' and a.dep_ in ['ROOT', 'ccomp', 'advcl', 'relcl']:
             return a
     return verb_tok
     
@@ -126,7 +127,7 @@ def find_tok_side_of_root(tok, root_tok):
         return None
 
 def find_subject(root_tok, verbose=False):
-    """Return list of nominal subject"""
+    """Return token of nominal subject"""
     subjects = [w for w in root_tok.lefts if w.dep_ == 'nsubj']
     try:
 #        for i, s in enumerate(subjects):
@@ -145,35 +146,92 @@ def get_org_span(tok):
         return subject
     return tok
 
-def check_emp_type_flags(tok):
+def check_emp_type_flags(toks, verbose=False):
     """Return 'Part-Time' or 'Full-Time' if corresponding flags
     are set to True."""
-    
-    if tok._.is_part_time == True:
+    part_time, full_time = (0,0)
+    for tok in toks:
+        if tok._.is_part_time == True:
+            part_time += 1 
+        elif tok._.is_full_time == True:
+            full_time += 1
+    if part_time and full_time:
+        if verbose == True:
+            print("Part_time and full_time flags found.")
+        return 'Other Employees'
+    if part_time:
         return 'Part-Time Employees'
-    if tok._.is_full_time == True:
+    if full_time:
         return 'Full-Time Employees'
     return 'Other Employees'
 
-def find_emp_type_tok(tok):
+def find_emp_type_toks(tok, verbose=False):
     """Return child token left of tok if emp_type flagged or ADJ."""
     
-    flagged_toks = [t for t in tok.children if t._.is_emp_type == True]
+    tok_emp_type_subtree = [t for t in tok.subtree if t._.is_emp_type == True]
+    flagged_toks = [t for t in tok.children if t in tok_emp_type_subtree]
+    if tok_emp_type_subtree:
+        if verbose == True:
+            print("tok_emp_type_subtree: ",tok_emp_type_subtree)
+        if flagged_toks:
+            if verbose == True:
+                print("Flagged toks from tok.children:", flagged_toks)
+        if not flagged_toks:
+            flagged_toks = [t for t in tok_emp_type_subtree if t.dep_ == 'compound' and t.head.dep_ == 'pobj' and t.head.head.head == tok]
+            if flagged_toks:
+                if verbose == True:
+                    print("Flagged toks from tok_emp_subtree:", flagged_toks)
+                    print("t.dep_ == 'compound', t.head.dep_ == 'pobj', and t.head.head.head is emp_noun")
+        if not flagged_toks:
+            flagged_toks = [t for t in tok_emp_type_subtree if t.dep_ == 'pobj' and t.head.head == tok]
+            if flagged_toks:
+                if verbose == True:
+                    print("Flagged toks from tok_emp_subtree:", flagged_toks)
+                    print("t.dep_ == 'pobj' and t.head.head is emp_noun")
+    # If word is dobj and emp_type is part of a prepositional phrase, need to check head.rights
+    if not flagged_toks and tok.dep_ == 'dobj':
+        tok_head_emptype_subtreee = [t for t in list(tok.head.subtree) if t._.is_emp_type]
+        tok_head_empnoun_subtreee = [t for t in list(tok.head.subtree) if t._.is_emp_noun]
+        if verbose==True:
+            print("Finding emp_type, emp_tok is dobj")
+            print("emp_noun tok head:", tok.head)
+            print("tok_head_emptype_subtreee:", tok_head_emptype_subtreee)
+            print("tok_head_empnoun_subtreee:", tok_head_empnoun_subtreee)
+        flagged_toks = [t for t in tok_head_emptype_subtreee if tok_head_emptype_subtreee.index(t) == tok_head_empnoun_subtreee.index(tok) ]
+        if flagged_toks:
+            if verbose == True:
+                print("Flagged toks from tok_head_emptype_subtreee:", flagged_toks)
+                print("Flagged tok heads:", [t.head for t in flagged_toks])
+                print("Flagged tok head deps:", [t.head.dep_ for t in flagged_toks])
     if flagged_toks:
-        return flagged_toks[0]
+        type_conjs = [t for t in list(flagged_toks[0].conjuncts) if t._.is_emp_type == True]
+        if type_conjs:
+            if verbose == True:
+                print("type_conjs: ", type_conjs)
+            flagged_toks = flagged_toks + type_conjs
+        if verbose == True:
+            print("Flagged_toks: ", flagged_toks)
+        #return flagged_toks[0]
+        return flagged_toks
     
     candidate_tok = tok.doc[tok.i - 1]  
     while candidate_tok.is_punct == True:
         candidate_tok = tok.doc[candidate_tok.i - 1]
     if candidate_tok.head == tok:
         if candidate_tok.pos_ == 'ADJ' or candidate_tok.dep_ == 'compound':
-            return candidate_tok
-    return 0
+            return [candidate_tok]
+        if verbose == True:
+            print("Candidate tok: ", candidate_tok)
+            print("Candidate tok.pos_:  ", candidate_tok.pos_)
+            print("Candidate tok.dep_:  ", candidate_tok.dep_)
+    if verbose == True:
+            print("No toks, returning 0.")
+    return flagged_toks
 
 def get_nummod_tok(tok, years, verbose=False):
     """Return tok.children that are nummod and card entities."""
     
-    num_toks = [c for c in tok.children if c.dep_ == 'nummod' and c.ent_type_ == 'CARDINAL']
+    num_toks = [c for c in tok.children if c.dep_ == 'nummod' and c.ent_type_ in ['CARDINAL', 'QUANTITY', 'FALSE_DATE']]
     if num_toks:
         if verbose == True:
             print("Num_toks are: " + str(num_toks))
@@ -184,7 +242,7 @@ def get_nummod_tok(tok, years, verbose=False):
             if verbose == True:
                 print("num_tok has conjugate children:" + str(num_tok_conj))
                 print("num_tok subtree is :" + str(list(num_tok.subtree)))
-            cards = [(c.i, c) for c in num_tok.subtree if c.tag_== 'CD' and c.ent_type_ == 'CARDINAL']
+            cards = [(c.i, c) for c in num_tok.subtree if c.tag_== 'CD' and c.ent_type_ in ['CARDINAL', 'QUANTITY', 'FALSE_DATE']]
             
             if len(years) == len(cards):
                 order_indices = [years.index(y) for y in sorted(years, reverse=True, key = lambda x: x[1])]
@@ -199,7 +257,7 @@ def get_nummod_tok(tok, years, verbose=False):
                     print("year_emps: " + str(year_emps))
         return num_tok
     
-    return 0      
+    return num_toks    
 
 def extract_emp_relations(doc, verb_list=False, verbose=False):
     """Return tuple of extracted relations."""
@@ -208,7 +266,8 @@ def extract_emp_relations(doc, verb_list=False, verbose=False):
     
     relation_tuples = []
     
-    tuple_field_names = ["sent_num", "word_num", "subject", "verb", "quantity", "quantity_type", "type_token" , "word", "sentence"]
+    tuple_field_names = ["sent_num", "word_num", "subject", "verb", 
+                         "quantity", "quantity_type", "type_token" , "word", "word_dep",  "depth", "sentence"]
     RelationDetails = namedtuple('RelationDetails', tuple_field_names)
     
     for sent_id, sent in enumerate(doc.sents):
@@ -225,6 +284,11 @@ def extract_emp_relations(doc, verb_list=False, verbose=False):
             if verbose == True:
                 print("Word_id is : " + str(word_id))
                 print("Word is : " + str(word))
+                print("Word subtree is : ", doc[word.left_edge.i:word.right_edge.i].text)
+                print("Word children : ", list(word.children))
+            
+            num_toks = []
+            num_tok = get_nummod_tok(word, years, verbose = verbose)
             
             # Find first verb ancestor 
             verb_tok = find_verb_tok(word)
@@ -246,10 +310,10 @@ def extract_emp_relations(doc, verb_list=False, verbose=False):
                         print(list(verb_tok.subtree))
                     continue
 
-            emp_type_tok = find_emp_type_tok(word)
+            emp_type_toks = find_emp_type_toks(word, verbose=verbose)
             emp_type = 'Other Employees'
-            if emp_type_tok:
-                emp_type = check_emp_type_flags(emp_type_tok)
+            if emp_type_toks:
+                emp_type = check_emp_type_flags(emp_type_toks, verbose=verbose)
             parts_found = []
             # Find out if the employee noun is in subject (left) or predicate (right)
             left_side = []; right_side = []
@@ -265,13 +329,13 @@ def extract_emp_relations(doc, verb_list=False, verbose=False):
             if verbose == True:
                 print("Dep_ of EMP_NOUN is: " + str(word.dep_))
             if word.dep_ in ('attr', 'dobj', 'compound') or word.dep_ == 'pobj' and word.head.dep_ == 'prep':
-                num_tok = get_nummod_tok(word, years, verbose = verbose)      
+                #num_tok = get_nummod_tok(word, years, verbose = verbose)      
                 if num_tok:
                     match_pairs.append((num_tok, word))
                 else:
-                    cards = [e for e in word.doc.ents if e.label_ == 'CARDINAL' and e.root in root_tok.rights]
+                    cards = [e for e in word.doc.ents if e.label_ in ['CARDINAL', 'FALSE_DATE'] and e.root in root_tok.rights]
                     if cards:
-                        cards = cards + [c for c in word.doc.ents if c.root in cards[0].root.subtree and c not in cards and c.label_ == 'CARDINAL']           
+                        cards = cards + [c for c in word.doc.ents if c.root in cards[0].root.subtree and c not in cards and c.label_ in ['CARDINAL', 'FALSE_DATE']]           
                         if word in left_side:    
                             if len(years) > 0:                       
                                 emp_counts = [(c.start, c) for c in sorted(cards, reverse=False, key = lambda x: x.start)]                      
@@ -306,7 +370,7 @@ def extract_emp_relations(doc, verb_list=False, verbose=False):
                                 print("Emp_tok is in right side; appending first card.")
                             match_pairs.append((cards[0], word))
                     elif verb_tok.dep_ == 'relcl':
-                        cards = [e for e in word.doc.ents if e.label_ == 'CARDINAL' and e.root in verb_tok.lefts]
+                        cards = [e for e in word.doc.ents if e.label_ in ['CARDINAL', 'FALSE_DATE'] and e.root in verb_tok.lefts]
                         if cards:
                             match_pairs.append((cards[0], word))
                             num_tok = cards[0]
@@ -335,20 +399,20 @@ def extract_emp_relations(doc, verb_list=False, verbose=False):
                     if num_tok:
                         parts_found.append(num_tok)
                         parts_found.append(emp_type)
-                        parts_found.append(emp_type_tok)
+                        parts_found.append(emp_type_toks)
                         parts_found.append(word)
                     elif word.head.head.head.pos_ == 'VERB':
                         if verbose == True:
                             print("No num_tok. ")
-                        cards = [c for c in word.head.head.head.rights if c.tag_== 'CD' and c.ent_type_ == 'CARDINAL']
+                        cards = [c for c in word.head.head.head.rights if c.tag_== 'CD' and c.ent_type_ in ['CARDINAL', 'QUANTITY', 'FALSE_DATE'] ]
                         years = [(y.i, y) for y in root_tok.subtree if y._.is_year == True]
                         match_pairs.append((years, cards))
                         if cards:
                             match_pairs.append((cards[0], word))
 
             elif word.dep_ == 'conj':
-                num_tok = get_nummod_tok(word, years, verbose = verbose)
-                head_num_tok = [w for w in [word.head] if w.tag_ == 'CD' and w.ent_type_ == 'CARDINAL']            
+                
+                head_num_tok = [w for w in [word.head] if w.tag_ == 'CD' and w.ent_type_ in ['CARDINAL', 'QUANTITY', 'FALSE_DATE'] ]
                 if verbose == True:
                     print("Emp_noun token has dep_ == 'conj'.")
                     print("Child num_tok: " + str(num_tok))
@@ -361,11 +425,14 @@ def extract_emp_relations(doc, verb_list=False, verbose=False):
                     if verbose == True:
                         print("years: " + str(years))   
                         print("num_toks: " + str(num_toks))   
-                    if head_num_tok[0].dep_ == 'conj' or head_num_tok[0].head.ent_type_ == 'CARDINAL' :
+                    if head_num_tok[0].dep_ == 'conj' or head_num_tok[0].head.ent_type_ in ['CARDINAL', 'FALSE_DATE'] :
                         num_toks = num_toks + [w for w in [head_num_tok[0].head] if w.tag_ == 'CD']
                     if len(years) > len(num_toks):
-                        if doc[head_num_tok[0].i - 2].ent_type_ == 'CARDINAL':
-                            num_toks = num_toks + [doc[head_num_tok[0].i - 2]] 
+                        possible_series_num_tok = doc[head_num_tok[0].i - 2]
+                        if possible_series_num_tok.ent_type_ in ['CARDINAL', 'FALSE_DATE']:
+                            if verbose == True:
+                                print("possible_series_num_tok: " + str(possible_series_num_tok))
+                            num_toks = num_toks + [possible_series_num_tok] 
                         head_num_conjucts = [c for c in head_num_tok[0].conjuncts if c.tag_ == 'CD']
                         if head_num_conjucts:
                             if head_num_conjucts[0].ent_type_ != 'CARDINAL':
@@ -408,20 +475,80 @@ def extract_emp_relations(doc, verb_list=False, verbose=False):
                 parts_found.append(root_tok)
                 parts_found.append(num_tok)
                 parts_found.append(emp_type)
-                parts_found.append(emp_type_tok)
+                parts_found.append(emp_type_toks)
                 parts_found.append(word)
             
             else:
                 continue
             
+            # Check for employee counts that are nummods of emp_type tokens
+            emp_type_num_toks = [get_nummod_tok(x,[], verbose=verbose) for x in emp_type_toks if get_nummod_tok(x,[])]
+            if emp_type_num_toks:
+                if verbose == True:
+                    print("emp_type_num_toks: ", emp_type_num_toks)
+                    print("num_tok: ", num_tok)
+                if num_tok:
+                    num_toks = sorted([num_tok] + emp_type_num_toks, key = lambda t: t.i)
+                else:
+                    num_toks = sorted(emp_type_num_toks, key = lambda t: t.i)
+                if verbose == True:
+                    print("num_toks: ", num_toks)
+                if len(emp_type_toks) == len(num_toks):
+                    emp_types = [check_emp_type_flags([x], verbose=verbose) for x in emp_type_toks]
+                    num_type_toks = list(zip(num_toks, emp_types,  emp_type_toks))
+                    if all([subject, root_tok]):
+                        for ir, r in enumerate(num_type_toks):
+                            details = [sent_id, word_id, subject, root_tok, r[0], r[1], r[2], word, word.dep_, depth, sent.text]
+                            if verbose == True:
+                                print("Detail_list ", ir, ": ", details)
+                            relation_tuples.append(RelationDetails(*details))
+                        continue
+                if verbose == True:
+                    print("emp_type_num_toks: ", emp_type_num_toks)
+            
+            # Check to see if emp_type actually belongs to a relative clause 
+            # with a different employee number 
+            # This should be replaced by a handler for relative clauses, 
+            # and more abstarct collection functions for employee count tokens
+            
+            if  len(emp_type_toks) == 1 and all([num_tok, len(emp_type_toks) == 1, emp_type_toks[0].head.dep_ == 'relcl', root_tok != find_verb_tok(emp_type_toks[0])]):
+                type_tok_relcl = emp_type_toks[0] # known to exist because of "if" condition 
+                verb_relcl = find_verb_tok(type_tok_relcl) # known to exist because of "if" condition 
+                sub_relcl = find_subject(verb_relcl) # looking for employee count as nsubj
+                if verbose == True:
+                    print("Type token in relative clause while emp_noun is not.")
+                    print("type_tok_relcl.dep_ is", type_tok_relcl.dep_)
+                    if sub_relcl:
+                        print("sub_relcl found: ", sub_relcl)
+                if sub_relcl:
+                    num_tok_relcl = [s for s in [sub_relcl] if s.tag_ == 'CD' and s.ent_type_ in ['CARDINAL', 'QUANTITY', 'FALSE_DATE']] 
+                    if num_tok_relcl:
+                        num_toks = [num_tok] + num_tok_relcl
+                        if verbose == True:
+                            print("num_tok_relcl:", num_tok_relcl)
+                            print("num_toks:", num_toks)
+                        if type_tok_relcl.dep_ == 'attr':
+                            emp_types = ['Other Employees', emp_type]
+                            emp_type_toks_relcl = list(find_verb_tok(ft_tok).subtree)
+                            if emp_type_toks_relcl: # Get evicence to support "Other Employees" classification
+                                if len(emp_type_toks_relcl) > 4:
+                                    emp_type_toks_relcl = emp_type_toks_relcl[:min(3,len(emp_type_toks_relcl))]
+                            emp_type_toks = [emp_type_toks_relcl, emp_type_toks[0]]
+                            for i_tup, tup in enumerate(list(zip([root_tok, verb_tok], num_toks, emp_types, emp_type_toks))):
+                                details = [sent_id, word_id, subject, tup[0], tup[1], tup[2], tup[3], word, word.dep_, depth, sent.text]
+                                if verbose == True:
+                                    print("Detail_list ", i_tup, ": ", details)
+                                relation_tuples.append(RelationDetails(*details))
+                            continue
+            
             if all([subject, root_tok, num_tok, emp_type ]):
                 if verbose == True:
-                    print(tuple(parts_found))
-                details = [sent_id, word_id] + parts_found + [sent.text]
+                    print("Parts found: ", tuple(parts_found))
+                details = [sent_id, word_id, subject, root_tok, num_tok, emp_type, emp_type_toks, word, word.dep_, depth, sent.text]
+                #details = [sent_id, word_id] + parts_found + [word.dep_, depth, sent.text]
                 relation_tuples.append(RelationDetails(*details))        
-    return relation_tuples
-    
-def make_fact_df(docs, re_func, df=0, id_fields=0, verbose = False):
+    return relation_tuples   
+def make_fact_df(docs, re_func, nlp=nlp, df=0, id_fields=0, verbose = False):
     """Return data frame with rows for each fact extracted. """
     
     # Initialize list of fields to maintain from input df. 
@@ -431,18 +558,27 @@ def make_fact_df(docs, re_func, df=0, id_fields=0, verbose = False):
     if type(docs) == type(""):
         docs = [docs]
     
-#    if type(df) == type(pd.DataFrame()) :
-#        doc_ids = df.index.tolist() # Use the index to identify documents
-#        if id_fields:
-#            input_df_fields = input_df_fields + id_fields 
-#        docs = docs.tolist()
+    if type(df) == type(pd.DataFrame()) :
+        doc_ids = df.index.tolist() # Use the index to identify documents
+        if id_fields:
+            input_df_fields = input_df_fields + id_fields 
+        docs = docs.tolist()
 
-    #else: 
-    doc_ids = list(range(len(docs)))
-        
+    else: 
+        doc_ids = list(range(len(docs)))
+    
+    err_ids = []
     all_docs, all_rels, doc_id_list = [], [], []
     for i, doc in enumerate(docs):
-        doc_rels = re_func(nlp(doc))
+        try:
+            doc_rels = re_func(nlp(doc))
+        except:
+            print("Error at index", i)
+            err_ids.extend(i)
+            if len(err_ids) < 20:
+                print("Error doc:")
+                print(doc)
+            
         if doc_rels:         
             if all_rels:
                 doc_list = [doc] * len(doc_rels)
@@ -472,13 +608,27 @@ def make_fact_df(docs, re_func, df=0, id_fields=0, verbose = False):
         output_df_fields = input_df_fields + field_names
         output_df = pd.DataFrame(fact_dict, columns=output_df_fields)
         return output_df
+    if err_ids:
+        print("Error ids:")
+        print(err_ids)
     return pd.DataFrame(columns = ['doc_ids', 'sent_num', 'word_num', 'subject', 'verb', 'quantity',
        'quantity_type', 'type_token', 'word', 'sentence'] ) 
 
+tens_dict = {}
+for w, n in zip([y + '-'  for y in tens_word_list ], list(range(2,10))):
+    tens_dict[w] = n
+teens_dict = {}
+for w, n in zip(teens_word_list, list(range(10,20))):
+    teens_dict[w] = n
+singles_dict = {}
+for w, n in zip(singles_word_list, list(range(1,10))):
+    singles_dict[w] = n
+
+
 def add_units_and_values(df, quantity_col):
-    """Create units, data_values columns from tokens in quantity_col."""
+    """Create units, data_value columns from tokens in quantity_col."""
     if df.shape[0] == 0:
-        return pd.DataFrame(columns = df.columns.tolist() + ['units', 'data_values'])
+        return pd.DataFrame(columns = df.columns.tolist() + ['units', 'data_value'])
     
     df = df.copy()
     df.loc[:, 'units'] = 'ones'
@@ -499,26 +649,27 @@ def add_units_and_values(df, quantity_col):
     df.loc[not_empty_units, 'units'] = df.loc[not_empty_units, quantity_col].apply(lambda x: [x.text for x in x if x._.is_num_word == True][-1])
     
     # Initialize the values column
-    df['data_values'] = '0'
-    df.loc[~quantity_bs, 'data_values'] = df.loc[~quantity_bs, quantity_col].apply(lambda x: x.text)
-    df.loc[quantity_bs, 'data_values'] = df.loc[quantity_bs, quantity_col].apply(lambda x: [x.text for x in x if x.like_num == True][0])  
+    df['data_value'] = '0'
+    df.loc[~quantity_bs, 'data_value'] = df.loc[~quantity_bs, quantity_col].apply(lambda x: x.text)
+    df.loc[quantity_bs, 'data_value'] = df.loc[quantity_bs, quantity_col].apply(lambda x: [x.text for x in x if x.like_num == True][0])  
 
-    comma_bs = df['data_values'].str.contains(",")
+    comma_bs = df['data_value'].str.contains(",")
     
     # Create dictionary mappings for small number words
-    df.replace({'data_values' : singles_dict}, inplace=True)
-    df.replace({'data_values' : teens_dict}, inplace=True)
+    df.replace({'data_value' : singles_dict}, inplace=True)
+    df.replace({'data_value' : teens_dict}, inplace=True)
 
-    df.loc[comma_bs,'data_values'] = df.loc[comma_bs,'data_values'].apply(lambda x: x.replace(',', ''))
-    not_num_bs = df['data_values'].astype('str').str.contains(re.compile(r"[^0-9.]"))
-    df.loc[not_num_bs, 'data_values'] = 0
-    df.loc[comma_bs, 'data_values'] = df.loc[comma_bs,'data_values'].apply(lambda x: float(x))
-    df.loc[~comma_bs,'data_values'] = df.loc[~comma_bs,'data_values'].apply(lambda x: float(x))
+    df.loc[comma_bs,'data_value'] = df.loc[comma_bs,'data_value'].apply(lambda x: x.replace(',', ''))
+    not_num_bs = df['data_value'].astype('str').str.contains(re.compile(r"[^0-9.]"))
+    df.loc[not_num_bs, 'data_value'] = 0
+    df.loc[comma_bs, 'data_value'] = df.loc[comma_bs,'data_value'].apply(lambda x: float(x))
+    df.loc[~comma_bs,'data_value'] = df.loc[~comma_bs,'data_value'].apply(lambda x: float(x))
     
     # Multiply values by 1000 if units = 'thousand'
-    df.loc[df.units == 'thousand', 'data_values'] = df.loc[df.units == 'thousand', 'data_values'] * 1000
+    df.loc[df.units == 'thousand', 'data_value'] = df.loc[df.units == 'thousand', 'data_value'] * 1000
     
     return df
+
 def fix_token_columns(df, col_list):
     """Return df with tokens converted to text."""
     if df.shape[0] == 0:
