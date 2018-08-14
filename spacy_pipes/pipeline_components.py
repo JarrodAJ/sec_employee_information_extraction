@@ -223,6 +223,7 @@ class FalseDateMatcher(object):
         self.matcher = Matcher(nlp.vocab)
         self.matcher.add(match_id, None, pattern_list)
         self.regex_pat = regex_pat
+        self.nlp=nlp
 
         # Register attributes on Doc and Span via a getter that checks if one of
         # the contained tokens is set to is_false_date == True.
@@ -250,13 +251,13 @@ class FalseDateMatcher(object):
                     # re-run NER on rest of span
                     if token.i > orig_span.start:
                         left_span = doc[orig_span.start: token.i]
-                        left_ents = list(nlp(left_span.text).ents)
+                        left_ents = list(self.nlp(left_span.text).ents)
                         if left_ents:
                             new_ents.append(Span(doc, left_span.start, left_span.end, label=self.orig_label))
                     new_ents.append(entity)
                     if token.i < orig_span.end:
                         right_span = doc[token.i + 1: orig_span.end + 1]
-                        right_ents = list(nlp(right_span.text).ents)
+                        right_ents = list(self.nlp(right_span.text).ents)
                         if right_ents:
                             new_ents.append(Span(doc, right_span.start, right_span.end, label=self.orig_label))
 
