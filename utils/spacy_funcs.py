@@ -117,9 +117,11 @@ def make_fact_df(docs, re_func, nlp, df=0, id_fields=0, verbose=False):
     err_ids = []
     all_docs, all_rels, doc_id_list = [], [], []
     for i, doc in enumerate(docs):
+
         try:
             doc_rels = re_func(nlp(doc))
         except:
+            doc_rels = False
             print("Error at index", i)
             err_ids = err_ids + [i]
             if len(err_ids) < 20:
